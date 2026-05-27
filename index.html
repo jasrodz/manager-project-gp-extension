@@ -65,6 +65,9 @@
 </table>
 
 <script>
+let allProjects = [];
+let showClosed = false;
+
 function money(amount, currency) {
     return new Intl.NumberFormat("en-AU", {
         style: "currency",
@@ -73,15 +76,23 @@ function money(amount, currency) {
 }
 
 function gpPercent(profit, income) {
-    if (!income || income === 0) return "N/A";
-    return ((profit / income) * 100).toFixed(2) + "%";
+    if (!income || income === 0) return null;
+    return ((profit / income) * 100);
 }
 
-function renderProjects(projects) {
+function renderProjects() {
+
     const tbody = document.querySelector("#projectTable tbody");
     tbody.innerHTML = "";
 
-    projects.forEach(project => {
+    let filteredProjects = allProjects;
+
+    if (!showClosed) {
+        filteredProjects = filteredProjects.filter(p => !p.inactive);
+    }
+
+    filteredProjects.forEach(project => {
+
         const income = project.income?.value || 0;
         const expenses = project.expenses?.value || 0;
         const profit = project.revisedProfit?.value ?? project.profit?.value ?? 0;
@@ -90,49 +101,110 @@ function renderProjects(projects) {
         const gp = gpPercent(profit, income);
 
         tbody.innerHTML += `
-            <tr>
+            <tr style="${project.inactive ? 'opacity:0.5;' : ''}">
                 <td>${project.name || ""}</td>
+
                 <td>${money(income, currency)}</td>
+
                 <td>${money(expenses, currency)}</td>
+
                 <td class="${profit >= 0 ? "positive" : "negative"}">
                     ${money(profit, currency)}
                 </td>
-                <td class="${profit >= 0 ? "positive" : "negative"}">
-                    ${gp}
+
+                <td class="${gp >= 0 ? "positive" : "negative"}">
+                    ${gp == null ? "N/A" : gp.toFixed(2) + "%"}
                 </td>
             </tr>
         `;
     });
 }
 
-function setStatus(message) {
-    document.querySelector("#projectTable tbody").innerHTML =
-        `<tr><td colspan="5">${message}</td></tr>`;
-}
+async function loadProjectsPage(skip = 0) {
 
-window.addEventListener("message", (event) => {
-    if (!event.data) return;
-    if (typeof event.data === "string") return;
+    return new Promise((resolve) => {
 
-    if (event.data.type === "api-response") {
-        if (event.data.status !== 200) {
-            setStatus("API error: " + JSON.stringify(event.data.body));
-            return;
+        function onMessage(event) {
+
+            if (!event.data) return;
+            if (typeof event.data === "string") return;
+
+            if (event.data.type === "api-response") {
+
+                window.removeEventListener("message", onMessage);
+
+                resolve(event.data.body);
+            }
         }
 
-        const projects = event.data.body.projects || [];
-        renderProjects(projects);
+        window.addEventListener("message", onMessage);
+
+        window.parent.postMessage({
+            type: "api-request",
+            method: "GET",
+            path: `/api2/projects?skip=${skip}`
+        }, "*");
+    });
+}
+
+async function loadAllProjects() {
+
+    document.querySelector("#status").innerText = "Loading projects...";
+
+    let skip = 0;
+    let finished = false;
+
+    while (!finished) {
+
+        const result = await loadProjectsPage(skip);
+
+        const projects = result.projects || [];
+
+        allProjects.push(...projects);
+
+        skip += projects.length;
+
+        if (projects.length < 50) {
+            finished = true;
+        }
     }
-});
+
+    document.querySelector("#status").innerText =
+        `${allProjects.length} projects loaded`;
+
+    renderProjects();
+}
 
 window.addEventListener("load", () => {
-    setStatus("Loading project GP%...");
 
-    window.parent.postMessage({
-        type: "api-request",
-        method: "GET",
-        path: "/api2/projects"
-    }, "*");
+    const controls = document.createElement("div");
+
+    controls.style.marginBottom = "15px";
+
+    controls.innerHTML = `
+        <label>
+            <input type="checkbox" id="closedToggle">
+            Show Closed Projects
+        </label>
+
+        <span id="status" style="margin-left:20px;"></span>
+    `;
+
+    document.body.insertBefore(
+        controls,
+        document.getElementById("projectTable")
+    );
+
+    document
+        .getElementById("closedToggle")
+        .addEventListener("change", (e) => {
+
+            showClosed = e.target.checked;
+
+            renderProjects();
+        });
+
+    loadAllProjects();
 });
 </script>
 </body>
