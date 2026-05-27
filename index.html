@@ -70,8 +70,28 @@ function setStatus(message) {
         `<tr><td colspan="5">${message}</td></tr>`;
 }
 
-window.addEventListener("message", (event) => {
-    setStatus("Message received: " + JSON.stringify(event.data));
+window.addEventListener("message", async (event) => {
+    if (!event.data) return;
+
+    if (event.data.type === "page-response") {
+        setStatus("Page context received. Requesting API token...");
+
+        window.parent.postMessage({
+            type: "api-request",
+            body: {
+                method: "GET",
+                path: "/api4/project-view"
+            }
+        }, "*");
+    }
+
+    if (event.data.type === "api-response") {
+        setStatus("API response received: " + JSON.stringify(event.data.body).substring(0, 500));
+    }
+
+    if (event.data.type === "api-error") {
+        setStatus("API error: " + JSON.stringify(event.data.body));
+    }
 });
 
 window.addEventListener("load", () => {
