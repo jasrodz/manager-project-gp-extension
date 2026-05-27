@@ -101,6 +101,16 @@ function apiRequest(path) {
     });
 }
 
+function detectInactive(detail) {
+    return (
+        detail.inactive === true ||
+        detail.Inactive === true ||
+        detail.isInactive === true ||
+        detail.active === false ||
+        detail.Active === false
+    );
+}
+
 function renderProjects() {
     const tbody = document.querySelector("#projectTable tbody");
     tbody.innerHTML = "";
@@ -155,9 +165,13 @@ async function loadProjects() {
 
         const detail = detailResponse.body || {};
 
+        if (p.name && p.name.includes("1006-Steps Zenith")) {
+            alert("1006-Steps Zenith detail:\n\n" + JSON.stringify(detail).substring(0, 3000));
+        }
+
         allProjects.push({
             ...p,
-            inactive: detail.inactive === true
+            inactive: detectInactive(detail)
         });
     }
 
