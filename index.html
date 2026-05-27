@@ -67,24 +67,26 @@
 <script>
 let allProjects = [];
 let showClosed = false;
+let searchText = "";
+let negativeOnly = false;
+let sortBy = "name";
 
-function money(amount, currency) {
+function money(amount, currency = "AUD") {
     return new Intl.NumberFormat("en-AU", {
         style: "currency",
-        currency: currency || "AUD"
+        currency
     }).format(amount || 0);
 }
 
 function gpPercent(profit, income) {
     if (!income || income === 0) return null;
-    return ((profit / income) * 100);
+    return (profit / income) * 100;
 }
 
 function apiRequest(path) {
     return new Promise((resolve) => {
         function onMessage(event) {
             if (!event.data || typeof event.data === "string") return;
-
             if (event.data.type === "api-response") {
                 window.removeEventListener("message", onMessage);
                 resolve(event.data);
@@ -96,30 +98,53 @@ function apiRequest(path) {
         window.parent.postMessage({
             type: "api-request",
             method: "GET",
-            path: path
+            path
         }, "*");
     });
-}
-
-function detectInactive(detail) {
-    return (
-        detail.inactive === true ||
-        detail.Inactive === true ||
-        detail.isInactive === true ||
-        detail.active === false ||
-        detail.Active === false
-    );
 }
 
 function renderProjects() {
     const tbody = document.querySelector("#projectTable tbody");
     tbody.innerHTML = "";
 
-    let filtered = allProjects;
+    let filtered = [...allProjects];
 
     if (!showClosed) {
         filtered = filtered.filter(p => !p.inactive);
     }
+
+    if (searchText) {
+        filtered = filtered.filter(p =>
+            (p.name || "").toLowerCase().includes(searchText.toLowerCase())
+        );
+    }
+
+    if (negativeOnly) {
+        filtered = filtered.filter(p => {
+            const profit = p.revisedProfit?.value ?? p.profit?.value ?? 0;
+            return profit < 0;
+        });
+    }
+
+    filtered.sort((a, b) => {
+        const incomeA = a.income?.value || 0;
+        const incomeB = b.income?.value || 0;
+        const profitA = a.revisedProfit?.value ?? a.profit?.value ?? 0;
+        const profitB = b.revisedProfit?.value ?? b.profit?.value ?? 0;
+        const gpA = gpPercent(profitA, incomeA) ?? -999999;
+        const gpB = gpPercent(profitB, incomeB) ?? -999999;
+
+        if (sortBy === "profitDesc") return profitB - profitA;
+        if (sortBy === "profitAsc") return profitA - profitB;
+        if (sortBy === "gpDesc") return gpB - gpA;
+        if (sortBy === "gpAsc") return gpA - gpB;
+
+        return (a.name || "").localeCompare(b.name || "");
+    });
+
+    let totalIncome = 0;
+    let totalExpenses = 0;
+    let totalProfit = 0;
 
     filtered.forEach(project => {
         const income = project.income?.value || 0;
@@ -127,6 +152,10 @@ function renderProjects() {
         const profit = project.revisedProfit?.value ?? project.profit?.value ?? 0;
         const currency = project.income?.currency || "AUD";
         const gp = gpPercent(profit, income);
+
+        totalIncome += income;
+        totalExpenses += expenses;
+        totalProfit += profit;
 
         tbody.innerHTML += `
             <tr style="${project.inactive ? 'opacity:0.45;' : ''}">
@@ -141,12 +170,26 @@ function renderProjects() {
         `;
     });
 
+    const totalGp = gpPercent(totalProfit, totalIncome);
+
+    tbody.innerHTML += `
+        <tr style="font-weight:bold; background:#f0f0f0;">
+            <td>Total</td>
+            <td>${money(totalIncome)}</td>
+            <td>${money(totalExpenses)}</td>
+            <td class="${totalProfit >= 0 ? "positive" : "negative"}">${money(totalProfit)}</td>
+            <td class="${totalGp == null ? "negative" : totalGp >= 0 ? "positive" : "negative"}">
+                ${totalGp == null ? "N/A" : totalGp.toFixed(2) + "%"}
+            </td>
+        </tr>
+    `;
+
     document.querySelector("#status").innerText =
         `${filtered.length} shown / ${allProjects.length} total loaded`;
 }
 
 async function loadProjects() {
-    document.querySelector("#status").innerText = "Loading project list...";
+    document.querySelector("#status").innerText = "Loading projects...";
 
     const listResponse = await apiRequest("/api2/projects?pageSize=500");
     const projects = listResponse.body.projects || [];
@@ -157,7 +200,7 @@ async function loadProjects() {
         const p = projects[i];
 
         document.querySelector("#status").innerText =
-            `Checking inactive status ${i + 1} of ${projects.length}...`;
+            `Checking project ${i + 1} of ${projects.length}...`;
 
         const detailResponse = await apiRequest(
             "/api4/project?Key=" + encodeURIComponent(p.key)
@@ -165,13 +208,9 @@ async function loadProjects() {
 
         const detail = detailResponse.body || {};
 
-        if (p.name && p.name.includes("1006-Steps Zenith")) {
-            alert("1006-Steps Zenith detail:\n\n" + JSON.stringify(detail).substring(0, 3000));
-        }
-
         allProjects.push({
             ...p,
-            inactive: detectInactive(detail)
+            inactive: detail.inactive === true
         });
     }
 
@@ -183,10 +222,26 @@ window.addEventListener("load", () => {
     controls.style.marginBottom = "15px";
 
     controls.innerHTML = `
-        <label>
+        <input id="searchBox" placeholder="Search project..." style="padding:6px; width:220px;">
+
+        <select id="sortSelect" style="padding:6px; margin-left:10px;">
+            <option value="name">Sort by Project Name</option>
+            <option value="gpDesc">GP% High to Low</option>
+            <option value="gpAsc">GP% Low to High</option>
+            <option value="profitDesc">Profit High to Low</option>
+            <option value="profitAsc">Profit Low to High</option>
+        </select>
+
+        <label style="margin-left:15px;">
+            <input type="checkbox" id="negativeToggle">
+            Negative only
+        </label>
+
+        <label style="margin-left:15px;">
             <input type="checkbox" id="closedToggle">
             Show Inactive / Closed Projects
         </label>
+
         <span id="status" style="margin-left:20px;"></span>
     `;
 
@@ -195,7 +250,22 @@ window.addEventListener("load", () => {
         document.getElementById("projectTable")
     );
 
-    document.getElementById("closedToggle").addEventListener("change", (e) => {
+    document.getElementById("searchBox").addEventListener("input", e => {
+        searchText = e.target.value;
+        renderProjects();
+    });
+
+    document.getElementById("sortSelect").addEventListener("change", e => {
+        sortBy = e.target.value;
+        renderProjects();
+    });
+
+    document.getElementById("negativeToggle").addEventListener("change", e => {
+        negativeOnly = e.target.checked;
+        renderProjects();
+    });
+
+    document.getElementById("closedToggle").addEventListener("change", e => {
         showClosed = e.target.checked;
         renderProjects();
     });
