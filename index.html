@@ -71,17 +71,26 @@ function setStatus(message) {
 }
 
 window.addEventListener("message", (event) => {
-    setStatus("Message received: " + JSON.stringify(event.data).substring(0, 1000));
+
+    if (!event.data) return;
+
+    setStatus(
+        "Message received: " +
+        JSON.stringify(event.data).substring(0, 1000)
+    );
+
 });
 
 window.addEventListener("load", () => {
+
     setStatus("Sending API request...");
 
     window.parent.postMessage({
         type: "api-request",
         method: "GET",
-        path: "/api4/project"
+        path: "/api4/projects"
     }, "*");
+
 });
 </script>
 
