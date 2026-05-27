@@ -80,60 +80,14 @@ function gpPercent(profit, income) {
     return ((profit / income) * 100);
 }
 
-function renderProjects() {
-
-    const tbody = document.querySelector("#projectTable tbody");
-    tbody.innerHTML = "";
-
-    let filteredProjects = allProjects;
-
-    if (!showClosed) {
-        filteredProjects = filteredProjects.filter(p => !p.inactive);
-    }
-
-    filteredProjects.forEach(project => {
-
-        const income = project.income?.value || 0;
-        const expenses = project.expenses?.value || 0;
-        const profit = project.revisedProfit?.value ?? project.profit?.value ?? 0;
-        const currency = project.income?.currency || "AUD";
-
-        const gp = gpPercent(profit, income);
-
-        tbody.innerHTML += `
-            <tr style="${project.inactive ? 'opacity:0.5;' : ''}">
-                <td>${project.name || ""}</td>
-
-                <td>${money(income, currency)}</td>
-
-                <td>${money(expenses, currency)}</td>
-
-                <td class="${profit >= 0 ? "positive" : "negative"}">
-                    ${money(profit, currency)}
-                </td>
-
-                <td class="${gp >= 0 ? "positive" : "negative"}">
-                    ${gp == null ? "N/A" : gp.toFixed(2) + "%"}
-                </td>
-            </tr>
-        `;
-    });
-}
-
-async function loadProjectsPage(skip = 0) {
-
+function apiRequest(path) {
     return new Promise((resolve) => {
-
         function onMessage(event) {
-
-            if (!event.data) return;
-            if (typeof event.data === "string") return;
+            if (!event.data || typeof event.data === "string") return;
 
             if (event.data.type === "api-response") {
-
                 window.removeEventListener("message", onMessage);
-
-                resolve(event.data.body);
+                resolve(event.data);
             }
         }
 
@@ -142,51 +96,83 @@ async function loadProjectsPage(skip = 0) {
         window.parent.postMessage({
             type: "api-request",
             method: "GET",
-            path: `/api2/projects?skip=${skip}`
+            path: path
         }, "*");
     });
 }
 
-async function loadAllProjects() {
+function renderProjects() {
+    const tbody = document.querySelector("#projectTable tbody");
+    tbody.innerHTML = "";
 
-    document.querySelector("#status").innerText = "Loading projects...";
+    let filtered = allProjects;
 
-    let skip = 0;
-    let finished = false;
-
-    while (!finished) {
-
-        const result = await loadProjectsPage(skip);
-
-        const projects = result.projects || [];
-
-        allProjects.push(...projects);
-
-        skip += projects.length;
-
-        if (projects.length < 50) {
-            finished = true;
-        }
+    if (!showClosed) {
+        filtered = filtered.filter(p => !p.inactive);
     }
 
+    filtered.forEach(project => {
+        const income = project.income?.value || 0;
+        const expenses = project.expenses?.value || 0;
+        const profit = project.revisedProfit?.value ?? project.profit?.value ?? 0;
+        const currency = project.income?.currency || "AUD";
+        const gp = gpPercent(profit, income);
+
+        tbody.innerHTML += `
+            <tr style="${project.inactive ? 'opacity:0.45;' : ''}">
+                <td>${project.name || ""}</td>
+                <td>${money(income, currency)}</td>
+                <td>${money(expenses, currency)}</td>
+                <td class="${profit >= 0 ? "positive" : "negative"}">${money(profit, currency)}</td>
+                <td class="${gp == null ? "negative" : gp >= 0 ? "positive" : "negative"}">
+                    ${gp == null ? "N/A" : gp.toFixed(2) + "%"}
+                </td>
+            </tr>
+        `;
+    });
+
     document.querySelector("#status").innerText =
-        `${allProjects.length} projects loaded`;
+        `${filtered.length} shown / ${allProjects.length} total loaded`;
+}
+
+async function loadProjects() {
+    document.querySelector("#status").innerText = "Loading project list...";
+
+    const listResponse = await apiRequest("/api2/projects?pageSize=500");
+    const projects = listResponse.body.projects || [];
+
+    allProjects = [];
+
+    for (let i = 0; i < projects.length; i++) {
+        const p = projects[i];
+
+        document.querySelector("#status").innerText =
+            `Checking inactive status ${i + 1} of ${projects.length}...`;
+
+        const detailResponse = await apiRequest(
+            "/api4/project?Key=" + encodeURIComponent(p.key)
+        );
+
+        const detail = detailResponse.body || {};
+
+        allProjects.push({
+            ...p,
+            inactive: detail.inactive === true
+        });
+    }
 
     renderProjects();
 }
 
 window.addEventListener("load", () => {
-
     const controls = document.createElement("div");
-
     controls.style.marginBottom = "15px";
 
     controls.innerHTML = `
         <label>
             <input type="checkbox" id="closedToggle">
-            Show Closed Projects
+            Show Inactive / Closed Projects
         </label>
-
         <span id="status" style="margin-left:20px;"></span>
     `;
 
@@ -195,16 +181,12 @@ window.addEventListener("load", () => {
         document.getElementById("projectTable")
     );
 
-    document
-        .getElementById("closedToggle")
-        .addEventListener("change", (e) => {
+    document.getElementById("closedToggle").addEventListener("change", (e) => {
+        showClosed = e.target.checked;
+        renderProjects();
+    });
 
-            showClosed = e.target.checked;
-
-            renderProjects();
-        });
-
-    loadAllProjects();
+    loadProjects();
 });
 </script>
 </body>
