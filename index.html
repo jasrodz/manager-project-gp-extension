@@ -66,23 +66,17 @@
 
 <script>
 function setStatus(message) {
-    document.querySelector("#projectTable tbody").innerHTML = `
-        <tr><td colspan="5">${message}</td></tr>
-    `;
+    document.querySelector("#projectTable tbody").innerHTML =
+        `<tr><td colspan="5">${message}</td></tr>`;
 }
 
-window.addEventListener("message", async (event) => {
-    if (event.source !== window.parent) return;
-    if (!event.data || event.data.type !== "context-response") return;
-
-    console.log("Manager context:", event.data.body);
-
-    setStatus("Context received. Next we will connect API.");
+window.addEventListener("message", (event) => {
+    setStatus("Message received: " + JSON.stringify(event.data));
 });
 
 window.addEventListener("load", () => {
-    setStatus("Requesting Manager context...");
-    window.parent.postMessage({ type: "context-request" }, "*");
+    setStatus("Requesting page context...");
+    window.parent.postMessage({ type: "page-request" }, "*");
 });
 </script>
 
