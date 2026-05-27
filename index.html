@@ -65,6 +65,46 @@
 </table>
 
 <script>
+function money(amount, currency) {
+    return new Intl.NumberFormat("en-AU", {
+        style: "currency",
+        currency: currency || "AUD"
+    }).format(amount || 0);
+}
+
+function gpPercent(profit, income) {
+    if (!income || income === 0) return "N/A";
+    return ((profit / income) * 100).toFixed(2) + "%";
+}
+
+function renderProjects(projects) {
+    const tbody = document.querySelector("#projectTable tbody");
+    tbody.innerHTML = "";
+
+    projects.forEach(project => {
+        const income = project.income?.value || 0;
+        const expenses = project.expenses?.value || 0;
+        const profit = project.revisedProfit?.value ?? project.profit?.value ?? 0;
+        const currency = project.income?.currency || "AUD";
+
+        const gp = gpPercent(profit, income);
+
+        tbody.innerHTML += `
+            <tr>
+                <td>${project.name || ""}</td>
+                <td>${money(income, currency)}</td>
+                <td>${money(expenses, currency)}</td>
+                <td class="${profit >= 0 ? "positive" : "negative"}">
+                    ${money(profit, currency)}
+                </td>
+                <td class="${profit >= 0 ? "positive" : "negative"}">
+                    ${gp}
+                </td>
+            </tr>
+        `;
+    });
+}
+
 function setStatus(message) {
     document.querySelector("#projectTable tbody").innerHTML =
         `<tr><td colspan="5">${message}</td></tr>`;
@@ -74,14 +114,19 @@ window.addEventListener("message", (event) => {
     if (!event.data) return;
     if (typeof event.data === "string") return;
 
-    setStatus(
-        "Message received: " +
-        JSON.stringify(event.data).substring(0, 1000)
-    );
+    if (event.data.type === "api-response") {
+        if (event.data.status !== 200) {
+            setStatus("API error: " + JSON.stringify(event.data.body));
+            return;
+        }
+
+        const projects = event.data.body.projects || [];
+        renderProjects(projects);
+    }
 });
 
 window.addEventListener("load", () => {
-    setStatus("Sending API request to /api2/projects...");
+    setStatus("Loading project GP%...");
 
     window.parent.postMessage({
         type: "api-request",
@@ -90,6 +135,5 @@ window.addEventListener("load", () => {
     }, "*");
 });
 </script>
-
 </body>
 </html>
