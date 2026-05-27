@@ -70,34 +70,42 @@ function setStatus(message) {
         `<tr><td colspan="5">${message}</td></tr>`;
 }
 
-window.addEventListener("message", async (event) => {
-    if (!event.data) return;
+async function postMessageWithResponse(message) {
+    return new Promise((resolve) => {
+        const requestId = crypto.randomUUID();
 
-    if (event.data.type === "page-response") {
-        setStatus("Page context received. Requesting API token...");
+        function onMessage(event) {
+            if (
+                event.data?.type === message.type + "-response" &&
+                event.data?.requestId === requestId
+            ) {
+                window.removeEventListener("message", onMessage);
+                resolve(event.data.body);
+            }
+        }
+
+        window.addEventListener("message", onMessage);
 
         window.parent.postMessage({
-            type: "api-request",
-            body: {
-                method: "GET",
-                path: "/api4/project-view"
-            }
+            ...message,
+            requestId
         }, "*");
-    }
+    });
+}
 
-    if (event.data.type === "api-response") {
-        setStatus("API response received: " + JSON.stringify(event.data.body).substring(0, 500));
-    }
+async function loadProjects() {
+    setStatus("Requesting project data...");
 
-    if (event.data.type === "api-error") {
-        setStatus("API error: " + JSON.stringify(event.data.body));
-    }
-});
+    const result = await postMessageWithResponse({
+        type: "api-request",
+        method: "GET",
+        path: "/api4/project"
+    });
 
-window.addEventListener("load", () => {
-    setStatus("Requesting page context...");
-    window.parent.postMessage({ type: "page-request" }, "*");
-});
+    setStatus("API result: " + JSON.stringify(result).substring(0, 1000));
+}
+
+window.addEventListener("load", loadProjects);
 </script>
 
 </body>
