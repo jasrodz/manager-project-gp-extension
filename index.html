@@ -70,42 +70,19 @@ function setStatus(message) {
         `<tr><td colspan="5">${message}</td></tr>`;
 }
 
-async function postMessageWithResponse(message) {
-    return new Promise((resolve) => {
-        const requestId = crypto.randomUUID();
+window.addEventListener("message", (event) => {
+    setStatus("Message received: " + JSON.stringify(event.data).substring(0, 1000));
+});
 
-        function onMessage(event) {
-            if (
-                event.data?.type === message.type + "-response" &&
-                event.data?.requestId === requestId
-            ) {
-                window.removeEventListener("message", onMessage);
-                resolve(event.data.body);
-            }
-        }
+window.addEventListener("load", () => {
+    setStatus("Sending API request...");
 
-        window.addEventListener("message", onMessage);
-
-        window.parent.postMessage({
-            ...message,
-            requestId
-        }, "*");
-    });
-}
-
-async function loadProjects() {
-    setStatus("Requesting project data...");
-
-    const result = await postMessageWithResponse({
+    window.parent.postMessage({
         type: "api-request",
         method: "GET",
         path: "/api4/project"
-    });
-
-    setStatus("API result: " + JSON.stringify(result).substring(0, 1000));
-}
-
-window.addEventListener("load", loadProjects);
+    }, "*");
+});
 </script>
 
 </body>
