@@ -65,74 +65,25 @@
 </table>
 
 <script>
-async function loadProjects() {
-
-    try {
-
-        // Ask Manager for extension context
-        window.parent.postMessage({
-            type: "manager:context:request"
-        }, "*");
-
-        window.addEventListener("message", async (event) => {
-
-            const context = event.data;
-
-            console.log("Manager Context:", context);
-
-            if (!context.api) {
-                document.querySelector("#projectTable tbody").innerHTML = `
-                    <tr>
-                        <td colspan="5">
-                            Manager API context not found.
-                        </td>
-                    </tr>
-                `;
-                return;
-            }
-
-            // API endpoint from Manager
-            const apiUrl = context.api.endpoint;
-
-            // Access token from Manager
-            const token = context.api.token;
-
-            // Request project data
-            const response = await fetch(
-                apiUrl + "/api4/project-view?access_token=" + token
-            );
-
-            const data = await response.json();
-
-            console.log(data);
-
-            const tbody = document.querySelector("#projectTable tbody");
-
-            tbody.innerHTML = `
-                <tr>
-                    <td colspan="5">
-                        API connected successfully.
-                    </td>
-                </tr>
-            `;
-
-        });
-
-    } catch (err) {
-
-        console.error(err);
-
-        document.querySelector("#projectTable tbody").innerHTML = `
-            <tr>
-                <td colspan="5">
-                    Error loading project data.
-                </td>
-            </tr>
-        `;
-    }
+function setStatus(message) {
+    document.querySelector("#projectTable tbody").innerHTML = `
+        <tr><td colspan="5">${message}</td></tr>
+    `;
 }
 
-loadProjects();
+window.addEventListener("message", async (event) => {
+    if (event.source !== window.parent) return;
+    if (!event.data || event.data.type !== "context-response") return;
+
+    console.log("Manager context:", event.data.body);
+
+    setStatus("Context received. Next we will connect API.");
+});
+
+window.addEventListener("load", () => {
+    setStatus("Requesting Manager context...");
+    window.parent.postMessage({ type: "context-request" }, "*");
+});
 </script>
 
 </body>
