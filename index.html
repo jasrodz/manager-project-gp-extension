@@ -74,6 +74,9 @@ window.addEventListener("message", (event) => {
 
     if (!event.data) return;
 
+    // Ignore browser/internal messages
+    if (typeof event.data === "string") return;
+
     setStatus(
         "Message received: " +
         JSON.stringify(event.data).substring(0, 1000)
@@ -83,7 +86,7 @@ window.addEventListener("message", (event) => {
 
 window.addEventListener("load", () => {
 
-    setStatus("Sending API request...");
+    setStatus("Sending API request to /api4/projects...");
 
     window.parent.postMessage({
         type: "api-request",
