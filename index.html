@@ -71,29 +71,23 @@ function setStatus(message) {
 }
 
 window.addEventListener("message", (event) => {
-
     if (!event.data) return;
-
-    // Ignore browser/internal messages
     if (typeof event.data === "string") return;
 
     setStatus(
         "Message received: " +
         JSON.stringify(event.data).substring(0, 1000)
     );
-
 });
 
 window.addEventListener("load", () => {
-
-    setStatus("Sending API request to /api4/projects...");
+    setStatus("Sending API request to /api2/projects...");
 
     window.parent.postMessage({
         type: "api-request",
         method: "GET",
-        path: "/api4/projects"
+        path: "/api2/projects"
     }, "*");
-
 });
 </script>
 
